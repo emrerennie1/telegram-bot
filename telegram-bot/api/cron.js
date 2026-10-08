@@ -1,35 +1,31 @@
-const { Telegram } = require('telegraf');
-const { kv } = require('@vercel/kv');
+import { Telegram } from 'telegraf';
+import { kv } from '@vercel/kv';
 
 const telegram = new Telegram(process.env.BOT_TOKEN);
 
-module.exports = async (req, res) => {
-    try {
-        // Veritabanındaki tüm kullanıcıları bul
-        const keys = await kv.keys('user_*');
-        const suAn = Date.now();
+export default async function handler(req, res) {
+  try {
+    const keys = await kv.keys('user_*');
+    const now = Date.now();
 
-        for (let key of keys) {
-            const bitisZamani = await kv.get(key);
+    for (const key of keys) {
+      const dueAt = Number(await kv.get(key));
 
-            // Eğer kaydedilen zaman şu anki zamana eşit veya geçmişse
-            if (suAn >= bitisZamani) {
-                const userId = key.split('_')[1];
+      if (Number.isFinite(dueAt) && now >= dueAt) {
+        const userId = key.slice('user_'.length);
 
-                // Mesajı Gönder
-                await telegram.sendMessage(
-                    userId,
-                    "🚨 Hey! 1 saat doldu. Tıklama zamanı geldi, oyuna gir!"
-                );
+        await telegram.sendMessage(
+          userId,
+          '🚨 Hey! 1 saat doldu. Tıklama zamanı geldi, oyuna gir!'
+        );
 
-                // Gönderdikten sonra veritabanından sil (tekrar atmasın)
-                await kv.del(key);
-            }
-        }
-
-        res.status(200).send('Zamanlayici kontrol edildi.');
-    } catch (error) {
-        console.error("Cron hatası:", error);
-        res.status(500).send('Cron hatası');
+        await kv.del(key);
+      }
     }
-};
+
+    return res.status(200).send('Zamanlayıcı kontrol edildi.');
+  } catch (error) {
+    console.error('Cron hatası:', error);
+    return res.status(500).send('Cron hatası');
+  }
+}
